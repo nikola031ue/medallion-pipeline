@@ -5,16 +5,32 @@ from datetime import date, datetime, timedelta, timezone
 
 import boto3
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 BUCKET = os.environ["BUCKET_NAME"]
 BASE = os.environ["HN_API_BASE"]
 TYPES = os.environ["HN_ITEM_TYPES"].split(",")
 PREFIX = os.environ["BRONZE_PREFIX"]
 
-s3 = boto3.client("s3")
-
 HOUR = 3600
 QUARTER = 900
+
+s3 = boto3.client("s3")
+
+
+def _make_session() -> requests.Session:
+    session = requests.Session()
+    retry = Retry(
+        total=3,
+        backoff_factor=0.5,
+        status_forcelist=[429, 500, 502, 503, 504],
+    )
+    session.mount("https://", HTTPAdapter(max_retries=retry))
+    return session
+
+
+SESSION = _make_session()
 
 
 def lambda_handler(event, context):
@@ -28,20 +44,28 @@ def lambda_handler(event, context):
     month = yesterday.strftime("%m")
     day = yesterday.strftime("%d")
 
+    failed = []
     for item_type in TYPES:
-        hits = fetch_all_hits(item_type, day_start, day_end)
+        try:
+            hits = fetch_all_hits(item_type, day_start, day_end)
 
-        seen = set()
-        unique = [h for h in hits if not (h["objectID"] in seen or seen.add(h["objectID"]))]
+            seen = set()
+            unique = [h for h in hits if not (h["objectID"] in seen or seen.add(h["objectID"]))]
 
-        key = f"{PREFIX}/year={year}/month={month}/day={day}/{item_type}.json"
-        s3.put_object(
-            Bucket=BUCKET,
-            Key=key,
-            Body=json.dumps(unique, ensure_ascii=False),
-            ContentType="application/json",
-        )
-        print(f"Wrote {len(unique)} items ({item_type}) → s3://{BUCKET}/{key}")
+            key = f"{PREFIX}/year={year}/month={month}/day={day}/{item_type}.json"
+            s3.put_object(
+                Bucket=BUCKET,
+                Key=key,
+                Body=json.dumps(unique, ensure_ascii=False),
+                ContentType="application/json",
+            )
+            print(f"Wrote {len(unique)} items ({item_type}) → s3://{BUCKET}/{key}")
+        except Exception as exc:
+            print(f"ERROR ({item_type}): {exc}")
+            failed.append(item_type)
+
+    if failed:
+        raise RuntimeError(f"Failed to fetch types: {failed}")
 
 
 def fetch_all_hits(tag: str, start_ts: int, end_ts: int, window: int = HOUR) -> list:
@@ -67,7 +91,7 @@ def _paginate_window(tag: str, start_ts: int, end_ts: int) -> list:
     hits = []
     page = 0
     while True:
-        resp = requests.get(
+        resp = SESSION.get(
             f"{BASE}/search_by_date",
             params={
                 "tags": tag,
