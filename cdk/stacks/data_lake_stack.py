@@ -17,11 +17,10 @@ class DataLakeStack(cdk.Stack):
             block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
             encryption=s3.BucketEncryption.S3_MANAGED,
             enforce_ssl=True,
+
         )
 
-        cdk.CfnOutput(
-            self,
-            "BucketName",
-            value=self.bucket.bucket_name,
-            description="Data lake S3 bucket name",
-        )
+        cdk.CfnOutput(self, "BucketName", value=self.bucket.bucket_name)
+        cdk.CfnOutput(self, "BronzePrefix", value=f"s3://{self.bucket.bucket_name}/bronze/")
+        cdk.CfnOutput(self, "SilverPrefix", value=f"s3://{self.bucket.bucket_name}/silver/")
+        cdk.CfnOutput(self, "GoldPrefix", value=f"s3://{self.bucket.bucket_name}/gold/")

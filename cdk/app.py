@@ -2,6 +2,7 @@
 import aws_cdk as cdk
 from stacks.network_stack import NetworkStack
 from stacks.data_lake_stack import DataLakeStack
+from stacks.bronze_stack import BronzeStack
 
 app = cdk.App()
 
@@ -11,6 +12,14 @@ env = cdk.Environment(
 )
 
 network = NetworkStack(app, "NetworkStack", env=env)
-DataLakeStack(app, "DataLakeStack", env=env)
+data_lake = DataLakeStack(app, "DataLakeStack", env=env)
+BronzeStack(
+    app,
+    "BronzeStack",
+    vpc=network.vpc,
+    lambda_sg=network.lambda_sg,
+    bucket=data_lake.bucket,
+    env=env,
+)
 
 app.synth()
