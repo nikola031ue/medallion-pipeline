@@ -46,6 +46,31 @@ class SilverStack(cdk.Stack):
         bucket.grant_read_write(self.hn_normalizer, "silver/posts/*")
         bucket.grant_read_write(self.hn_normalizer, "silver/users/*")
 
+        self.twitter_normalizer = lambda_.DockerImageFunction(
+            self,
+            "TwitterNormalizer",
+            code=lambda_.DockerImageCode.from_image_asset(
+                "../lambdas/silver/twitter_normalizer"
+            ),
+            vpc=vpc,
+            security_groups=[lambda_sg],
+            vpc_subnets=ec2.SubnetSelection(
+                subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
+            ),
+            timeout=cdk.Duration.minutes(15),
+            memory_size=1024,
+            environment={
+                "BUCKET_NAME": bucket.bucket_name,
+                "BRONZE_KEY": "bronze/twitter/covid_tweets.csv",
+                "SILVER_POSTS_PREFIX": "silver/posts",
+                "SILVER_USERS_PREFIX": "silver/users",
+            },
+        )
+
+        bucket.grant_read(self.twitter_normalizer, "bronze/twitter/*")
+        bucket.grant_read_write(self.twitter_normalizer, "silver/posts/*")
+        bucket.grant_read_write(self.twitter_normalizer, "silver/users/*")
+
         rule = events.Rule(
             self,
             "DailyHnNormalizeTrigger",
