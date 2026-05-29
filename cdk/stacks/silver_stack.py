@@ -4,6 +4,8 @@ from aws_cdk import aws_events as events
 from aws_cdk import aws_events_targets as targets
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_s3 as s3
+from aws_cdk import aws_stepfunctions as sfn
+from aws_cdk import aws_stepfunctions_tasks as tasks
 from constructs import Construct
 
 
@@ -70,6 +72,47 @@ class SilverStack(cdk.Stack):
         bucket.grant_read(self.twitter_normalizer, "bronze/twitter/*")
         bucket.grant_read_write(self.twitter_normalizer, "silver/posts/*")
         bucket.grant_read_write(self.twitter_normalizer, "silver/users/*")
+
+        # Step Functions
+        hn_task = tasks.LambdaInvoke(self, "RunHnNormalizer", lambda_function=self.hn_normalizer)
+        hn_task.add_retry(
+            max_attempts=2,
+            interval=cdk.Duration.seconds(30),
+            backoff_rate=2,
+            errors=["States.TaskFailed", "Lambda.ServiceException"],
+        )
+        hn_task.add_catch(
+            sfn.Pass(self, "HnNormalizerFailed"),
+            errors=["States.ALL"],
+            result_path="$.hn_error",
+        )
+
+        twitter_task = tasks.LambdaInvoke(self, "RunTwitterNormalizer", lambda_function=self.twitter_normalizer)
+        twitter_task.add_retry(
+            max_attempts=2,
+            interval=cdk.Duration.seconds(30),
+            backoff_rate=2,
+            errors=["States.TaskFailed", "Lambda.ServiceException"],
+        )
+        twitter_task.add_catch(
+            sfn.Pass(self, "TwitterNormalizerFailed"),
+            errors=["States.ALL"],
+            result_path="$.twitter_error",
+        )
+
+        parallel = sfn.Parallel(self, "NormalizeBothSources", comment="HN i Twitter normalizacija paralelno")
+        parallel.branch(hn_task)
+        parallel.branch(twitter_task)
+
+        validation = sfn.Pass(self, "ValidationComplete", comment="Silver layer normalizacija završena")
+
+        sfn.StateMachine(
+            self,
+            "SilverStateMachine",
+            state_machine_name="silver-normalization",
+            definition_body=sfn.DefinitionBody.from_chainable(parallel.next(validation)),
+            timeout=cdk.Duration.minutes(35),
+        )
 
         rule = events.Rule(
             self,
