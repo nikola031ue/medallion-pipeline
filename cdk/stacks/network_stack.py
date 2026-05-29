@@ -32,7 +32,6 @@ class NetworkStack(cdk.Stack):
             ],
         )
 
-        # S3 Gateway Endpoint — free, lets private-subnet Lambdas reach S3 without NAT
         self.vpc.add_gateway_endpoint(
             "S3Endpoint",
             service=ec2.GatewayVpcEndpointAwsService.S3,
@@ -59,13 +58,13 @@ class NetworkStack(cdk.Stack):
             description="Security group for EC2 instance running Superset and PostgreSQL",
             allow_all_outbound=False,
         )
-        # PostgreSQL reachable only from Lambda functions inside this VPC
+        # PostgreSQL can be reachable only from Lambda functions inside this VPC
         self.ec2_sg.add_ingress_rule(
             ec2.Peer.security_group_id(self.lambda_sg.security_group_id),
             ec2.Port.tcp(5432),
             "PostgreSQL from Lambda SG",
         )
-        # Superset UI reachable only from within the VPC CIDR
+        # Superset UI can be reachable only from within the VPC CIDR
         self.ec2_sg.add_ingress_rule(
             ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
             ec2.Port.tcp(8088),
