@@ -102,7 +102,7 @@ class GoldStack(cdk.Stack):
             result_path="$.sync_error",
         )
 
-        state_machine = sfn.StateMachine(
+        self.state_machine = sfn.StateMachine(
             self,
             "GoldStateMachine",
             state_machine_name="gold-pipeline",
@@ -118,4 +118,4 @@ class GoldStack(cdk.Stack):
             schedule=events.Schedule.cron(hour="3", minute="0"),
             description="Daily trigger for gold pipeline at 3am UTC",
         )
-        rule.add_target(targets.SfnStateMachine(state_machine))
+        rule.add_target(targets.SfnStateMachine(self.state_machine))
