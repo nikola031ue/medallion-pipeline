@@ -5,6 +5,7 @@ from stacks.data_lake_stack import DataLakeStack
 from stacks.bronze_stack import BronzeStack
 from stacks.silver_stack import SilverStack
 from stacks.gold_stack import GoldStack
+from stacks.viz_stack import VizStack
 
 app = cdk.App()
 
@@ -38,6 +39,15 @@ GoldStack(
     "GoldStack",
     vpc=network.vpc,
     lambda_sg=network.lambda_sg,
+    bucket=data_lake.bucket,
+    env=env,
+)
+
+VizStack(
+    app,
+    "VizStack",
+    vpc=network.vpc,
+    ec2_sg=network.ec2_sg,
     bucket=data_lake.bucket,
     env=env,
 )

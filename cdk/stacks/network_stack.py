@@ -64,11 +64,11 @@ class NetworkStack(cdk.Stack):
             ec2.Port.tcp(5432),
             "PostgreSQL from Lambda SG",
         )
-        # Superset UI can be reachable only from within the VPC CIDR
+        # Superset UI accessible from the internet
         self.ec2_sg.add_ingress_rule(
-            ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
+            ec2.Peer.any_ipv4(),
             ec2.Port.tcp(8088),
-            "Superset UI from VPC",
+            "Superset UI from internet",
         )
         self.ec2_sg.add_egress_rule(
             ec2.Peer.any_ipv4(),
