@@ -93,16 +93,30 @@ def lambda_handler(event, context):
         print(f"ERROR fact_posts_by_type: {exc}")
         failed.append("fact_posts_by_type")
 
-    # 2 & 3. Broj korisnika HN i X (dnevno)
+    # 2 & 3. daily_users_metric — total_users i new_users po platformi (dnevno)
     try:
-        user_counts = pd.DataFrame([
-            {"platform": "HackerNews", "user_count": len(hn_users), "date": date_str},
-            {"platform": "X", "user_count": len(x_users), "date": date_str},
-        ])
-        _write(user_counts, f"{GOLD_PREFIX}/fact_user_counts/date={date_str}/data.parquet")
+        # HackerNews — new_users = distinktni autori iz jucerasnjih postova
+        hn_new_users = hn_posts["author_username"].nunique() if not hn_posts.empty else 0
+        hn_row = pd.DataFrame([{
+            "date": date_str,
+            "total_users": len(hn_users),
+            "new_users": hn_new_users,
+        }])
+        _write(hn_row, f"{GOLD_PREFIX}/daily_users_metric/platform=HackerNews/date={date_str}/data.parquet")
+
+        # X — new_users = korisnici ciji user_created odgovara jucerasnjem datumu
+        obj = s3.get_object(Bucket=BUCKET, Key=BRONZE_TWITTER_KEY)
+        tw_full = pd.read_csv(io.BytesIO(obj["Body"].read()), dtype=str).fillna("")
+        x_new_users = tw_full[tw_full["user_created"].str.startswith(date_str)]["user_name"].nunique()
+        x_row = pd.DataFrame([{
+            "date": date_str,
+            "total_users": len(x_users),
+            "new_users": int(x_new_users),
+        }])
+        _write(x_row, f"{GOLD_PREFIX}/daily_users_metric/platform=X/date={date_str}/data.parquet")
     except Exception as exc:
-        print(f"ERROR fact_user_counts: {exc}")
-        failed.append("fact_user_counts")
+        print(f"ERROR daily_users_metric: {exc}")
+        failed.append("daily_users_metric")
 
     # 4. Top 10 X korisnika po broju pratilaca (iz bronze)
     try:
