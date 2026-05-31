@@ -100,18 +100,54 @@ class SilverStack(cdk.Stack):
             result_path="$.twitter_error",
         )
 
+        self.data_quality_calculator = lambda_.DockerImageFunction(
+            self,
+            "DataQualityCalculator",
+            code=lambda_.DockerImageCode.from_image_asset(
+                "../lambdas/gold/data_quality"
+            ),
+            vpc=vpc,
+            security_groups=[lambda_sg],
+            vpc_subnets=ec2.SubnetSelection(
+                subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
+            ),
+            timeout=cdk.Duration.minutes(10),
+            memory_size=512,
+            environment={
+                "BUCKET_NAME": bucket.bucket_name,
+                "SILVER_PREFIX": "silver",
+                "GOLD_PREFIX": "gold",
+            },
+        )
+
+        bucket.grant_read(self.data_quality_calculator, "silver/*")
+        bucket.grant_read_write(self.data_quality_calculator, "gold/data_quality_kpi/*")
+
+        data_quality_task = tasks.LambdaInvoke(
+            self, "DataQualityKPI", lambda_function=self.data_quality_calculator
+        )
+        data_quality_task.add_retry(
+            max_attempts=2,
+            interval=cdk.Duration.seconds(30),
+            backoff_rate=2,
+            errors=["States.TaskFailed", "Lambda.ServiceException"],
+        )
+        data_quality_task.add_catch(
+            sfn.Pass(self, "DataQualityFailed"),
+            errors=["States.ALL"],
+            result_path="$.data_quality_error",
+        )
+
         parallel = sfn.Parallel(self, "NormalizeBothSources", comment="HN i Twitter normalizacija paralelno")
         parallel.branch(hn_task)
         parallel.branch(twitter_task)
-
-        validation = sfn.Pass(self, "ValidationComplete", comment="Silver layer normalizacija završena")
 
         sfn.StateMachine(
             self,
             "SilverStateMachine",
             state_machine_name="silver-normalization",
-            definition_body=sfn.DefinitionBody.from_chainable(parallel.next(validation)),
-            timeout=cdk.Duration.minutes(35),
+            definition_body=sfn.DefinitionBody.from_chainable(parallel.next(data_quality_task)),
+            timeout=cdk.Duration.minutes(45),
         )
 
         rule = events.Rule(
