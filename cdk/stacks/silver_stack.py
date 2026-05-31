@@ -142,7 +142,7 @@ class SilverStack(cdk.Stack):
         parallel.branch(hn_task)
         parallel.branch(twitter_task)
 
-        sfn.StateMachine(
+        self.state_machine = sfn.StateMachine(
             self,
             "SilverStateMachine",
             state_machine_name="silver-normalization",

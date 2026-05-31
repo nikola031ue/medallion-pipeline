@@ -6,6 +6,7 @@ from stacks.bronze_stack import BronzeStack
 from stacks.silver_stack import SilverStack
 from stacks.gold_stack import GoldStack
 from stacks.viz_stack import VizStack
+from stacks.notif_stack import NotifStack
 
 app = cdk.App()
 
@@ -25,7 +26,7 @@ BronzeStack(
     env=env,
 )
 
-SilverStack(
+silver = SilverStack(
     app,
     "SilverStack",
     vpc=network.vpc,
@@ -43,13 +44,22 @@ viz = VizStack(
     env=env,
 )
 
-GoldStack(
+gold = GoldStack(
     app,
     "GoldStack",
     vpc=network.vpc,
     lambda_sg=network.lambda_sg,
     bucket=data_lake.bucket,
     ec2_private_ip=viz.ec2_private_ip,
+    env=env,
+)
+
+NotifStack(
+    app,
+    "NotifStack",
+    silver_state_machine=silver.state_machine,
+    gold_state_machine=gold.state_machine,
+    discord_webhook_url=app.node.try_get_context("discord_webhook_url") or "",
     env=env,
 )
 
