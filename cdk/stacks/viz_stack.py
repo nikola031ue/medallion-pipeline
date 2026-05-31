@@ -9,6 +9,8 @@ services:
   db:
     image: postgres:15
     restart: always
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_DB: superset
       POSTGRES_USER: superset
@@ -113,6 +115,8 @@ class VizStack(cdk.Stack):
             ],
             user_data=ec2.UserData.custom(USER_DATA),
         )
+
+        self.ec2_private_ip = self.instance.instance_private_ip
 
         cdk.CfnOutput(self, "SupersetURL", value=f"http://{self.instance.instance_public_ip}:8088")
         cdk.CfnOutput(self, "InstanceId", value=self.instance.instance_id)

@@ -49,6 +49,11 @@ class NetworkStack(cdk.Stack):
             ec2.Port.tcp(443),
             "HTTPS outbound for API calls and AWS SDK",
         )
+        self.lambda_sg.add_egress_rule(
+            ec2.Peer.any_ipv4(),
+            ec2.Port.tcp(5432),
+            "PostgreSQL outbound to EC2",
+        )
 
         # Security group for the EC2 instance (Apache Superset + PostgreSQL)
         self.ec2_sg = ec2.SecurityGroup(

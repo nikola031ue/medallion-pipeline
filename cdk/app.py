@@ -34,21 +34,22 @@ SilverStack(
     env=env,
 )
 
+viz = VizStack(
+    app,
+    "VizStack",
+    vpc=network.vpc,
+    ec2_sg=network.ec2_sg,
+    bucket=data_lake.bucket,
+    env=env,
+)
+
 GoldStack(
     app,
     "GoldStack",
     vpc=network.vpc,
     lambda_sg=network.lambda_sg,
     bucket=data_lake.bucket,
-    env=env,
-)
-
-VizStack(
-    app,
-    "VizStack",
-    vpc=network.vpc,
-    ec2_sg=network.ec2_sg,
-    bucket=data_lake.bucket,
+    ec2_private_ip=viz.ec2_private_ip,
     env=env,
 )
 
