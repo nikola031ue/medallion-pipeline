@@ -71,3 +71,54 @@ class BronzeStack(cdk.Stack):
             description="Daily trigger for HN bronze fetcher at midnight UTC",
         )
         rule.add_target(targets.LambdaFunction(self.hn_fetcher))
+
+        twitter_dlq = sqs.Queue(
+            self,
+            "TwitterFetcherDlq",
+            queue_name="twitter-fetcher-dlq",
+            retention_period=cdk.Duration.days(14),
+            encryption=sqs.QueueEncryption.SQS_MANAGED,
+        )
+
+        self.twitter_fetcher = lambda_.Function(
+            self,
+            "TwitterFetcher",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="handler.lambda_handler",
+            code=lambda_.Code.from_asset(
+                "../lambdas/bronze/twitter_fetcher",
+                bundling=cdk.BundlingOptions(
+                    image=lambda_.Runtime.PYTHON_3_11.bundling_image,
+                    command=[
+                        "bash",
+                        "-c",
+                        "pip install -r requirements.txt -t /asset-output && cp -r . /asset-output",
+                    ],
+                ),
+            ),
+            vpc=vpc,
+            security_groups=[lambda_sg],
+            vpc_subnets=ec2.SubnetSelection(
+                subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
+            ),
+            timeout=cdk.Duration.minutes(15),
+            memory_size=512,
+            ephemeral_storage_size=cdk.Size.mebibytes(2048),
+            environment={
+                "BUCKET_NAME": bucket.bucket_name,
+                "BRONZE_KEY": "bronze/twitter/covid_tweets.csv",
+                "KAGGLE_DATASET": "gpreda/covid19-tweets",
+                # KAGGLE_USERNAME and KAGGLE_KEY must be set manually in Lambda env vars
+            },
+            dead_letter_queue=twitter_dlq,
+        )
+
+        bucket.grant_put(self.twitter_fetcher, "bronze/twitter/*")
+
+        twitter_rule = events.Rule(
+            self,
+            "DailyTwitterTrigger",
+            schedule=events.Schedule.cron(hour="1", minute="0"),
+            description="Daily trigger for Twitter bronze fetcher at 01:00 UTC",
+        )
+        twitter_rule.add_target(targets.LambdaFunction(self.twitter_fetcher))
